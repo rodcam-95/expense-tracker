@@ -1,0 +1,906 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Expense Tracker</title>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  /* 📱 MOBILE FIXES */
+@media (max-width: 600px) {
+
+  main {
+    padding: 1.2rem 1rem;
+  }
+
+  /* Header stacks nicely */
+  .page-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .page-title {
+    font-size: 1.5rem;
+  }
+
+  /* Cards spacing */
+  .card {
+    padding: 1.1rem;
+  }
+
+  /* Donut smaller */
+  .donut-center {
+    width: 160px;
+    height: 160px;
+  }
+
+  .donut-label .total-amount {
+    font-size: 1.3rem;
+  }
+
+  /* Chart tighter */
+  #areaChart {
+    margin-top: 0.5rem;
+  }
+
+  /* Filters wrap better */
+  .section-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  /* Buttons full width */
+  .add-btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  /* TABLE → make it scroll instead of squish */
+  .table-wrap {
+    overflow-x: auto;
+  }
+
+  table {
+    min-width: 600px;
+  }
+
+  /* Slightly tighter rows */
+  td {
+    font-size: 0.8rem;
+    padding: 0.6rem 0;
+  }
+
+  th {
+    font-size: 0.7rem;
+  }
+}
+  :root {
+    --bg: #f7f5f0;
+    --card: #ffffff;
+    --ink: #1a1a18;
+    --muted: #888880;
+    --border: #e8e5de;
+    --accent: #e8621a;
+    --accent2: #2db87a;
+    --accent3: #f5a623;
+    --shadow: 0 2px 16px rgba(0,0,0,0.07);
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    font-family: 'DM Sans', sans-serif;
+    color: var(--ink);
+    min-height: 100vh;
+  }
+
+  /* NAV */
+  nav {
+    background: var(--card);
+    border-bottom: 1px solid var(--border);
+    padding: 0 2rem;
+    display: flex;
+    align-items: center;
+    gap: 2rem;
+    height: 52px;
+    position: sticky; top: 0; z-index: 100;
+  }
+  .nav-logo {
+    font-family: 'Instrument Serif', serif;
+    font-size: 1.25rem;
+    display: flex; align-items: center; gap: 0.5rem;
+    color: var(--ink);
+  }
+  .nav-logo span { font-size: 1.3rem; }
+  nav a { color: var(--muted); text-decoration: none; font-size: 0.875rem; font-weight: 500; }
+  nav a.active { color: var(--ink); }
+
+  /* MAIN */
+  main { max-width: 1100px; margin: 0 auto; padding: 2.5rem 2rem; }
+
+  /* PAGE HEADER */
+  .page-header {
+    display: flex; align-items: flex-end; justify-content: space-between;
+    margin-bottom: 2rem; flex-wrap: wrap; gap: 1rem;
+  }
+  .page-title { font-family: 'Instrument Serif', serif; font-size: 2rem; font-weight: 400; }
+  .date-badge {
+    display: flex; align-items: center; gap: 0.5rem;
+    border: 1px solid var(--border); border-radius: 8px;
+    padding: 0.5rem 0.9rem; font-size: 0.8rem; color: var(--muted);
+    background: var(--card); cursor: pointer;
+  }
+  .date-badge svg { opacity: 0.5; }
+
+  /* GRID */
+  .dashboard-grid {
+    display: grid;
+    grid-template-columns: 320px 1fr;
+    gap: 1.5rem;
+    margin-bottom: 2.5rem;
+  }
+  @media (max-width: 760px) { .dashboard-grid { grid-template-columns: 1fr; } }
+
+  .card {
+    background: var(--card);
+    border-radius: 16px;
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow);
+    padding: 1.5rem;
+  }
+  .card-title { font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin-bottom: 1.25rem; }
+
+  /* DONUT */
+  .donut-wrap { display: flex; flex-direction: column; align-items: center; gap: 1.2rem; }
+  .donut-center { position: relative; width: 200px; height: 200px; }
+  #donutChart { transform: rotate(-90deg); }
+  .donut-label {
+    position: absolute; top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+  }
+  .donut-label .total-amount { font-family: 'Instrument Serif', serif; font-size: 1.7rem; }
+  .donut-label .total-sub { font-size: 0.7rem; color: var(--muted); margin-top: 2px; }
+
+  .legend { display: flex; flex-direction: column; gap: 0.5rem; width: 100%; }
+  .legend-item { display: flex; align-items: center; gap: 0.6rem; font-size: 0.82rem; }
+  .legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+  .legend-name { flex: 1; color: var(--muted); }
+  .legend-val { font-weight: 600; }
+
+  /* AREA CHART */
+  .chart-card { display: flex; flex-direction: column; }
+  #areaChart { flex: 1; }
+
+  /* ADD BTN */
+  .add-btn {
+    display: inline-flex; align-items: center; gap: 0.5rem;
+    background: var(--accent); color: #fff;
+    border: none; border-radius: 10px;
+    padding: 0.65rem 1.2rem;
+    font-family: 'DM Sans', sans-serif; font-size: 0.875rem; font-weight: 500;
+    cursor: pointer; transition: background 0.15s, transform 0.1s;
+  }
+  .add-btn:hover { background: #cf5515; }
+  .add-btn:active { transform: scale(0.97); }
+
+  /* TABLE */
+  .section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.25rem; flex-wrap: wrap; gap: 0.75rem; }
+  .section-title { font-family: 'Instrument Serif', serif; font-size: 1.4rem; font-weight: 400; }
+
+  .filter-bar { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+  .filter-btn {
+    border: 1px solid var(--border); border-radius: 20px;
+    padding: 0.3rem 0.75rem; font-size: 0.775rem; font-weight: 500;
+    background: var(--card); color: var(--muted); cursor: pointer;
+    transition: all 0.15s;
+  }
+  .filter-btn.active, .filter-btn:hover { background: var(--ink); color: #fff; border-color: var(--ink); }
+
+  table { width: 100%; border-collapse: collapse; }
+  thead tr { border-bottom: 1px solid var(--border); }
+  th { text-align: left; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); padding: 0 0 0.75rem; }
+  tbody tr { border-bottom: 1px solid var(--border); transition: background 0.12s; }
+  tbody tr:last-child { border-bottom: none; }
+  tbody tr:hover { background: #faf9f6; }
+  td { padding: 0.85rem 0; font-size: 0.875rem; }
+  td:first-child { color: var(--muted); font-size: 0.82rem; width: 120px; }
+  td.amount { font-weight: 600; font-variant-numeric: tabular-nums; width: 110px; }
+  td.actions { text-align: right; color: var(--muted); cursor: pointer; font-size: 1rem; user-select: none; }
+  td.actions span:hover { color: var(--ink); }
+
+  .tag {
+    display: inline-block; padding: 0.2rem 0.65rem;
+    border-radius: 20px; font-size: 0.72rem; font-weight: 600;
+    color: #fff; text-transform: lowercase;
+  }
+
+  /* CATEGORY AUTOCOMPLETE */
+  .cat-input-wrap { position: relative; }
+  .cat-input-wrap input { width: 100%; }
+  .cat-dropdown {
+    position: absolute; top: calc(100% + 4px); left: 0; right: 0;
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 10px; box-shadow: var(--shadow);
+    z-index: 300; overflow: hidden; display: none;
+  }
+  .cat-dropdown.open { display: block; }
+  .cat-option {
+    padding: 0.55rem 0.9rem; font-size: 0.875rem; cursor: pointer;
+    display: flex; align-items: center; gap: 0.5rem;
+    transition: background 0.1s;
+  }
+  .cat-option:hover, .cat-option.focused { background: var(--bg); }
+  .cat-option .cat-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+
+  /* MODAL */
+  .modal-overlay {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,0.35); backdrop-filter: blur(4px);
+    z-index: 200; align-items: center; justify-content: center;
+  }
+  .modal-overlay.open { display: flex; }
+  .modal {
+    background: var(--card); border-radius: 20px;
+    padding: 2rem; width: 420px; max-width: 95vw;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.18);
+    animation: slideUp 0.22s ease;
+  }
+  @keyframes slideUp { from { opacity:0; transform: translateY(20px); } to { opacity:1; transform: none; } }
+  .modal h2 { font-family: 'Instrument Serif', serif; font-size: 1.4rem; font-weight: 400; margin-bottom: 1.5rem; }
+  .form-row { display: flex; flex-direction: column; gap: 0.4rem; margin-bottom: 1rem; }
+  .form-row label { font-size: 0.78rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+  .form-row input, .form-row select, .form-row textarea {
+    border: 1px solid var(--border); border-radius: 10px;
+    padding: 0.65rem 0.9rem; font-family: 'DM Sans', sans-serif; font-size: 0.9rem;
+    background: var(--bg); color: var(--ink); outline: none; width: 100%;
+    transition: border-color 0.15s;
+  }
+  .form-row input:focus, .form-row select:focus { border-color: var(--accent); }
+  .form-row textarea { resize: vertical; min-height: 70px; }
+  .modal-actions { display: flex; gap: 0.75rem; margin-top: 1.5rem; }
+  .btn-cancel {
+    flex: 1; border: 1px solid var(--border); border-radius: 10px;
+    padding: 0.65rem; background: none; cursor: pointer;
+    font-family: 'DM Sans', sans-serif; font-size: 0.875rem; color: var(--muted);
+    transition: background 0.15s;
+  }
+  .btn-cancel:hover { background: var(--bg); }
+  .btn-save {
+    flex: 2; background: var(--accent); color: #fff; border: none;
+    border-radius: 10px; padding: 0.65rem; cursor: pointer;
+    font-family: 'DM Sans', sans-serif; font-size: 0.875rem; font-weight: 600;
+    transition: background 0.15s;
+  }
+  .btn-save:hover { background: #cf5515; }
+
+  .empty-state { text-align: center; padding: 3rem 1rem; color: var(--muted); font-size: 0.9rem; }
+
+  /* CURRENCY TABS */
+  .currency-tabs { display: flex; gap: 0.4rem; }
+  .currency-tab {
+    border: 1.5px solid var(--border); border-radius: 8px;
+    padding: 0.3rem 0.8rem; font-size: 0.82rem; font-weight: 600;
+    background: var(--card); color: var(--muted); cursor: pointer;
+    transition: all 0.15s;
+  }
+  .currency-tab.active { border-color: var(--accent); color: var(--accent); background: #fff5f0; }
+  .currency-tab:hover:not(.active) { border-color: var(--ink); color: var(--ink); }
+
+  /* currency badge in table */
+  .cur-badge {
+    display: inline-block; font-size: 0.68rem; font-weight: 700;
+    padding: 0.1rem 0.4rem; border-radius: 4px; margin-left: 0.3rem;
+    vertical-align: middle;
+  }
+  .cur-crc { background: #e6f4ea; color: #1e7e34; }
+  .cur-usd { background: #e8f0fe; color: #1a55c4; }
+
+  /* CHECKBOXES */
+  .cb-col { width: 36px; }
+  input[type=checkbox] {
+    width: 16px; height: 16px; accent-color: var(--accent); cursor: pointer;
+  }
+  tbody tr.selected { background: #fff5f0; }
+
+  /* BULK BAR */
+  .bulk-bar {
+    display: none; align-items: center; gap: 1rem;
+    background: var(--ink); color: #fff;
+    border-radius: 12px; padding: 0.6rem 1rem;
+    font-size: 0.85rem; font-weight: 500;
+    margin-bottom: 1rem; animation: slideUp 0.18s ease;
+  }
+  .bulk-bar.visible { display: flex; }
+  .bulk-bar-count { flex: 1; }
+  .bulk-del-btn {
+    background: #e8266e; color: #fff; border: none; border-radius: 8px;
+    padding: 0.4rem 0.9rem; font-size: 0.82rem; font-weight: 600;
+    cursor: pointer; font-family: 'DM Sans', sans-serif;
+    transition: background 0.15s;
+  }
+  .bulk-del-btn:hover { background: #c41f5e; }
+  .bulk-cancel-btn {
+    background: rgba(255,255,255,0.15); color: #fff; border: none; border-radius: 8px;
+    padding: 0.4rem 0.9rem; font-size: 0.82rem; font-weight: 500;
+    cursor: pointer; font-family: 'DM Sans', sans-serif;
+    transition: background 0.15s;
+  }
+  .bulk-cancel-btn:hover { background: rgba(255,255,255,0.25); }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="nav-logo"><span>💸</span> Expenses</div>
+  <a href="#" class="active">Transactions</a>
+</nav>
+
+<main>
+  <div class="page-header">
+    <h1 class="page-title">Dashboard Overview</h1>
+    <div class="date-badge">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+      <span id="dateRangeLabel">All time</span>
+    </div>
+  </div>
+
+  <div class="dashboard-grid">
+    <!-- Donut -->
+    <div class="card donut-wrap">
+      <p class="card-title">Spending by Category</p>
+      <div class="donut-center">
+        <svg id="donutChart" width="200" height="200" viewBox="0 0 200 200"></svg>
+        <div class="donut-label">
+          <div class="total-amount" id="totalAmount">0</div>
+          <div class="total-sub">total spent</div>
+        </div>
+      </div>
+      <div class="legend" id="legend"></div>
+    </div>
+
+    <!-- Area chart -->
+    <div class="card chart-card">
+      <p class="card-title">Spending Over Time</p>
+      <svg id="areaChart" width="100%" viewBox="0 0 560 220" preserveAspectRatio="xMidYMid meet"></svg>
+    </div>
+  </div>
+
+  <!-- Transactions -->
+  <div class="section-header">
+    <h2 class="section-title">Transactions Log</h2>
+    <div style="display:flex;gap:0.75rem;flex-wrap:wrap;align-items:center;">
+      <div class="currency-tabs" id="currencyTabs">
+        <button class="currency-tab active" data-cur="all">All</button>
+        <button class="currency-tab" data-cur="CRC">₡ CRC</button>
+        <button class="currency-tab" data-cur="USD">$ USD</button>
+      </div>
+      <div class="filter-bar" id="filterBar">
+        <button class="filter-btn active" data-cat="all">All</button>
+      </div>
+      <button class="add-btn" onclick="openModal()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        Add Expense
+      </button>
+    </div>
+  </div>
+
+  <div class="bulk-bar" id="bulkBar">
+    <span class="bulk-bar-count" id="bulkCount">0 selected</span>
+    <button class="bulk-cancel-btn" onclick="clearSelection()">Cancel</button>
+    <button class="bulk-del-btn" onclick="deleteSelected()">🗑️ Delete selected</button>
+  </div>
+
+  <div class="card" style="padding:0 1.5rem;">
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th class="cb-col"><input type="checkbox" id="selectAll" title="Select all" onchange="toggleSelectAll(this)"></th>
+          <th>Date</th>
+          <th>Amount</th>
+          <th>Category</th>
+          <th>Description</th>
+          <th style="text-align:right">Actions</th>
+        </tr>
+      </thead>
+      <tbody id="txTable"></tbody>
+    </table>
+  </div>
+  <div id="emptyState" class="empty-state" style="display:none;">No transactions yet. Add your first expense!</div>
+  </div>
+</main>
+
+<!-- Modal -->
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal">
+    <h2 id="modalTitle">Add Expense</h2>
+    <div style="display:flex;gap:0.75rem;">
+      <div class="form-row" style="flex:1;">
+        <label>Amount</label>
+        <input type="number" id="fAmount" placeholder="0.00" min="0" step="0.01">
+      </div>
+      <div class="form-row" style="width:110px;">
+        <label>Currency</label>
+        <select id="fCurrency">
+          <option value="CRC">₡ CRC</option>
+          <option value="USD">$ USD</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-row">
+      <label>Category</label>
+      <div class="cat-input-wrap">
+        <input type="text" id="fCategory" placeholder="e.g. Food, Transport, Rent…" autocomplete="off">
+        <div class="cat-dropdown" id="catDropdown"></div>
+      </div>
+    </div>
+    <div class="form-row">
+      <label>Date</label>
+      <input type="date" id="fDate">
+    </div>
+    <div class="form-row">
+      <label>Description</label>
+      <textarea id="fDesc" placeholder="What did you spend on?"></textarea>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeModal()">Cancel</button>
+      <button class="btn-save" onclick="saveExpense()">Save Expense</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ─── DATA ──────────────────────────────────────────────────────────────────
+let expenses = JSON.parse(localStorage.getItem('gullak_expenses') || '[]');
+let editingId = null;
+let activeFilter = 'all';
+let activeCurrency = 'all';
+let selected = new Set();
+
+// ─── CATEGORY COLORS (auto-generated, stable per name) ─────────────────────
+const PALETTE = [
+  '#e8621a','#2db87a','#1a8ce8','#e8266e','#7c5cbf',
+  '#f5a623','#3d8c6e','#c0392b','#2471a3','#884ea0',
+  '#1e8449','#d35400','#2e86c1','#a93226','#117a65'
+];
+const colorCache = {};
+function catColor(cat) {
+  const key = cat.toLowerCase().trim();
+  if (!colorCache[key]) {
+    const idx = Object.keys(colorCache).length % PALETTE.length;
+    colorCache[key] = PALETTE[idx];
+  }
+  return colorCache[key];
+}
+
+function getCategories() {
+  const seen = new Set();
+  const cats = [];
+  for (const e of expenses) {
+    const k = e.category.toLowerCase().trim();
+    if (!seen.has(k)) { seen.add(k); cats.push(e.category.trim()); }
+  }
+  return cats;
+}
+
+const CURRENCIES = {
+  CRC: { symbol: '₡', name: 'CRC', decimals: 0 },
+  USD: { symbol: '$', name: 'USD', decimals: 2 }
+};
+
+function save() { localStorage.setItem('gullak_expenses', JSON.stringify(expenses)); }
+function genId() { return Date.now().toString(36) + Math.random().toString(36).slice(2); }
+
+function fmt(n, currency) {
+  const cur = CURRENCIES[currency] || CURRENCIES.CRC;
+  const formatted = Number(n).toLocaleString('en-US', {
+    minimumFractionDigits: cur.decimals,
+    maximumFractionDigits: cur.decimals
+  });
+  return `${cur.symbol}${formatted}`;
+}
+
+function fmtDate(d) {
+  const dt = new Date(d + 'T00:00:00');
+  return dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+function visibleExpenses() {
+  return expenses.filter(e => activeCurrency === 'all' || e.currency === activeCurrency);
+}
+
+// ─── MODAL ─────────────────────────────────────────────────────────────────
+function openModal(id = null) {
+  editingId = id;
+  document.getElementById('modalTitle').textContent = id ? 'Edit Expense' : 'Add Expense';
+  if (id) {
+    const e = expenses.find(x => x.id === id);
+    document.getElementById('fAmount').value = e.amount;
+    document.getElementById('fCurrency').value = e.currency || 'CRC';
+    document.getElementById('fCategory').value = e.category;
+    document.getElementById('fDate').value = e.date;
+    document.getElementById('fDesc').value = e.description;
+  } else {
+    document.getElementById('fAmount').value = '';
+    document.getElementById('fCurrency').value = activeCurrency !== 'all' ? activeCurrency : 'CRC';
+    document.getElementById('fCategory').value = '';
+    document.getElementById('fDate').value = new Date().toISOString().split('T')[0];
+    document.getElementById('fDesc').value = '';
+  }
+  document.getElementById('catDropdown').classList.remove('open');
+  document.getElementById('modalOverlay').classList.add('open');
+  document.getElementById('fAmount').focus();
+}
+function closeModal() {
+  document.getElementById('modalOverlay').classList.remove('open');
+  document.getElementById('catDropdown').classList.remove('open');
+  editingId = null;
+}
+document.getElementById('modalOverlay').addEventListener('click', e => {
+  if (e.target === document.getElementById('modalOverlay')) closeModal();
+});
+
+function saveExpense() {
+  const amount = parseFloat(document.getElementById('fAmount').value);
+  const currency = document.getElementById('fCurrency').value;
+  const category = document.getElementById('fCategory').value.trim();
+  const date = document.getElementById('fDate').value;
+  const description = document.getElementById('fDesc').value.trim();
+  if (!amount || amount <= 0) { alert('Please enter a valid amount.'); return; }
+  if (!category) { alert('Please enter a category.'); return; }
+  if (!date) { alert('Please select a date.'); return; }
+  if (!description) { alert('Please add a description.'); return; }
+
+  // ensure color assigned
+  catColor(category);
+
+  if (editingId) {
+    const i = expenses.findIndex(x => x.id === editingId);
+    expenses[i] = { id: editingId, amount, currency, category, date, description };
+  } else {
+    expenses.push({ id: genId(), amount, currency, category, date, description });
+  }
+  save(); closeModal(); render();
+}
+
+// ─── CATEGORY AUTOCOMPLETE ──────────────────────────────────────────────────
+let dropFocusIdx = -1;
+
+function updateDropdown(query) {
+  const dd = document.getElementById('catDropdown');
+  const cats = getCategories();
+  const q = query.toLowerCase().trim();
+  // show all if empty, filter if typing (exclude exact match)
+  const matches = cats.filter(c => !q || (c.toLowerCase().includes(q) && c.toLowerCase() !== q));
+  if (!matches.length) { dd.classList.remove('open'); return; }
+  dropFocusIdx = -1;
+  dd.innerHTML = matches.map((c, i) => `
+    <div class="cat-option" data-idx="${i}" onmousedown="pickCategory('${c.replace(/'/g,"\\'")}')">
+      <span class="cat-dot" style="background:${catColor(c)}"></span>${c}
+    </div>`).join('');
+  dd.classList.add('open');
+}
+
+function pickCategory(val) {
+  document.getElementById('fCategory').value = val;
+  document.getElementById('catDropdown').classList.remove('open');
+}
+
+document.getElementById('fCategory').addEventListener('input', e => updateDropdown(e.target.value));
+document.getElementById('fCategory').addEventListener('focus', e => updateDropdown(e.target.value));
+document.getElementById('fCategory').addEventListener('blur', () => {
+  setTimeout(() => document.getElementById('catDropdown').classList.remove('open'), 150);
+});
+document.getElementById('fCategory').addEventListener('keydown', e => {
+  const dd = document.getElementById('catDropdown');
+  const opts = dd.querySelectorAll('.cat-option');
+  if (!dd.classList.contains('open') || !opts.length) return;
+  if (e.key === 'ArrowDown') { e.preventDefault(); dropFocusIdx = Math.min(dropFocusIdx+1, opts.length-1); }
+  else if (e.key === 'ArrowUp') { e.preventDefault(); dropFocusIdx = Math.max(dropFocusIdx-1, -1); }
+  else if (e.key === 'Enter' && dropFocusIdx >= 0) { e.preventDefault(); pickCategory(opts[dropFocusIdx].textContent.trim()); return; }
+  else if (e.key === 'Escape') { dd.classList.remove('open'); return; }
+  opts.forEach((o, i) => o.classList.toggle('focused', i === dropFocusIdx));
+});
+
+function deleteExpense(id) {
+  if (!confirm('Delete this expense?')) return;
+  expenses = expenses.filter(x => x.id !== id);
+  save(); render();
+}
+
+// ─── CURRENCY TABS ─────────────────────────────────────────────────────────
+document.getElementById('currencyTabs').addEventListener('click', e => {
+  const btn = e.target.closest('.currency-tab');
+  if (!btn) return;
+  document.querySelectorAll('.currency-tab').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  activeCurrency = btn.dataset.cur;
+  selected.clear();
+  render();
+});
+
+// ─── FILTER ────────────────────────────────────────────────────────────────
+document.getElementById('filterBar').addEventListener('click', e => {
+  const btn = e.target.closest('.filter-btn');
+  if (!btn) return;
+  activeFilter = btn.dataset.cat;
+  selected.clear();
+  renderFilterBar();
+  renderTable();
+});
+
+// ─── SELECTION ─────────────────────────────────────────────────────────────
+function updateBulkBar() {
+  const bar = document.getElementById('bulkBar');
+  const count = document.getElementById('bulkCount');
+  if (selected.size > 0) {
+    bar.classList.add('visible');
+    count.textContent = `${selected.size} expense${selected.size > 1 ? 's' : ''} selected`;
+  } else {
+    bar.classList.remove('visible');
+  }
+  // sync select-all checkbox state
+  const allBoxes = document.querySelectorAll('.row-cb');
+  const selectAllBox = document.getElementById('selectAll');
+  if (selectAllBox) {
+    selectAllBox.checked = allBoxes.length > 0 && [...allBoxes].every(cb => selected.has(cb.dataset.id));
+    selectAllBox.indeterminate = selected.size > 0 && !selectAllBox.checked;
+  }
+}
+
+function toggleRow(id, checked) {
+  checked ? selected.add(id) : selected.delete(id);
+  const row = document.querySelector(`tr[data-id="${id}"]`);
+  if (row) row.classList.toggle('selected', checked);
+  updateBulkBar();
+}
+
+function toggleSelectAll(cb) {
+  document.querySelectorAll('.row-cb').forEach(box => {
+    box.checked = cb.checked;
+    cb.checked ? selected.add(box.dataset.id) : selected.delete(box.dataset.id);
+    const row = document.querySelector(`tr[data-id="${box.dataset.id}"]`);
+    if (row) row.classList.toggle('selected', cb.checked);
+  });
+  updateBulkBar();
+}
+
+function clearSelection() {
+  selected.clear();
+  document.querySelectorAll('.row-cb').forEach(cb => { cb.checked = false; });
+  document.querySelectorAll('tbody tr').forEach(r => r.classList.remove('selected'));
+  updateBulkBar();
+}
+
+function deleteSelected() {
+  if (!selected.size) return;
+  if (!confirm(`Delete ${selected.size} expense${selected.size > 1 ? 's' : ''}?`)) return;
+  expenses = expenses.filter(e => !selected.has(e.id));
+  selected.clear();
+  save(); render();
+}
+
+// ─── TABLE ─────────────────────────────────────────────────────────────────
+function renderTable() {
+  const tbody = document.getElementById('txTable');
+  const empty = document.getElementById('emptyState');
+  let base = visibleExpenses();
+  const filtered = activeFilter === 'all' ? base : base.filter(x => x.category.toLowerCase().trim() === activeFilter);
+  const sorted = [...filtered].sort((a, b) => b.date.localeCompare(a.date));
+  if (!sorted.length) {
+    tbody.innerHTML = '';
+    empty.style.display = 'block';
+    updateBulkBar();
+    return;
+  }
+  empty.style.display = 'none';
+  tbody.innerHTML = sorted.map(e => {
+    const cur = e.currency || 'CRC';
+    const isSel = selected.has(e.id);
+    const color = catColor(e.category);
+    return `
+    <tr data-id="${e.id}" class="${isSel ? 'selected' : ''}">
+      <td class="cb-col"><input type="checkbox" class="row-cb" data-id="${e.id}" ${isSel ? 'checked' : ''} onchange="toggleRow('${e.id}', this.checked)"></td>
+      <td>${fmtDate(e.date)}</td>
+      <td class="amount">
+        ${fmt(e.amount, cur)}
+        <span class="cur-badge cur-${cur.toLowerCase()}">${cur}</span>
+      </td>
+      <td><span class="tag" style="background:${color}">${e.category}</span></td>
+      <td>${e.description}</td>
+      <td class="actions">
+        <span title="Edit" onclick="openModal('${e.id}')" style="margin-right:0.75rem;cursor:pointer;">✏️</span>
+        <span title="Delete" onclick="deleteExpense('${e.id}')" style="cursor:pointer;">🗑️</span>
+      </td>
+    </tr>
+  `}).join('');
+  updateBulkBar();
+}
+
+// ─── DONUT ─────────────────────────────────────────────────────────────────
+function renderDonut() {
+  const svg = document.getElementById('donutChart');
+  const legendEl = document.getElementById('legend');
+  const totalEl = document.getElementById('totalAmount');
+  const cx = 100, cy = 100, r = 80, stroke = 30;
+  const circ = 2 * Math.PI * r;
+
+  const base = visibleExpenses();
+
+  if (!base.length) {
+    svg.innerHTML = `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="#e8e5de" stroke-width="${stroke}"/>`;
+    totalEl.innerHTML = '<span style="font-size:1.1rem">—</span>';
+    legendEl.innerHTML = '';
+    return;
+  }
+
+  // When viewing a single currency, tally by category normally
+  // When viewing "all", tally by category+currency key so mixed currencies stay separate
+  const totals = {}; // key → { cat, currency, amount }
+  for (const e of base) {
+    const cur = e.currency || 'CRC';
+    const key = activeCurrency === 'all' ? `${e.category}||${cur}` : e.category;
+    if (!totals[key]) totals[key] = { cat: e.category, currency: cur, amount: 0 };
+    totals[key].amount += e.amount;
+  }
+
+  const entries = Object.values(totals);
+  const grandTotal = entries.reduce((a, b) => a + b.amount, 0);
+
+  // Center label: single currency → show total; mixed → show per-currency totals
+  if (activeCurrency !== 'all') {
+    const sym = CURRENCIES[activeCurrency].symbol;
+    const dec = CURRENCIES[activeCurrency].decimals;
+    totalEl.innerHTML = `<span>${sym}${grandTotal.toLocaleString('en-US', { minimumFractionDigits: dec, maximumFractionDigits: dec })}</span>`;
+  } else {
+    const byCur = {};
+    for (const e of base) {
+      const cur = e.currency || 'CRC';
+      byCur[cur] = (byCur[cur] || 0) + e.amount;
+    }
+    totalEl.innerHTML = Object.entries(byCur).map(([cur, amt]) => {
+      const { symbol, decimals } = CURRENCIES[cur];
+      return `<div style="font-size:1rem;line-height:1.4">${symbol}${amt.toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals })}</div>`;
+    }).join('');
+  }
+
+  let offset = 0;
+  const segments = entries.map(item => {
+    const pct = item.amount / grandTotal;
+    const dash = pct * circ;
+    const el = `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${catColor(item.cat)}" stroke-width="${stroke}" stroke-dasharray="${dash.toFixed(2)} ${(circ - dash).toFixed(2)}" style="stroke-dashoffset:-${(offset * circ).toFixed(2)}"/>`;
+    offset += pct;
+    return { ...item, el };
+  });
+
+  svg.innerHTML = segments.map(s => s.el).join('');
+
+  legendEl.innerHTML = segments.map(s => {
+    const { symbol, decimals } = CURRENCIES[s.currency];
+    const valStr = `${symbol}${s.amount.toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals })}`;
+    const curBadge = activeCurrency === 'all'
+      ? `<span class="cur-badge cur-${s.currency.toLowerCase()}" style="margin-left:0.25rem">${s.currency}</span>`
+      : '';
+    return `
+    <div class="legend-item">
+      <div class="legend-dot" style="background:${catColor(s.cat)}"></div>
+      <span class="legend-name">${s.cat}${curBadge}</span>
+      <span class="legend-val">${valStr}</span>
+    </div>`;
+  }).join('');
+}
+
+// ─── AREA CHART ────────────────────────────────────────────────────────────
+function renderAreaChart() {
+  const svg = document.getElementById('areaChart');
+  const W = 560, H = 220, pad = { t: 20, r: 20, b: 40, l: 60 };
+  const iW = W - pad.l - pad.r, iH = H - pad.t - pad.b;
+
+  const base = visibleExpenses();
+
+  if (!base.length) {
+    svg.innerHTML = `<text x="${W/2}" y="${H/2}" text-anchor="middle" fill="#888" font-size="13" font-family="DM Sans">Add expenses to see your chart</text>`;
+    return;
+  }
+
+  // Group by date
+  const byDate = {};
+  for (const e of base) byDate[e.date] = (byDate[e.date] || 0) + e.amount;
+  const sorted = Object.entries(byDate).sort((a, b) => a[0].localeCompare(b[0]));
+
+  if (sorted.length < 2) {
+    svg.innerHTML = `<text x="${W/2}" y="${H/2}" text-anchor="middle" fill="#888" font-size="13" font-family="DM Sans">Add more dates to see the trend</text>`;
+    return;
+  }
+
+  const dates = sorted.map(x => x[0]);
+  const vals = sorted.map(x => x[1]);
+  const maxVal = Math.max(...vals);
+  const minDate = new Date(dates[0]), maxDate = new Date(dates[dates.length-1]);
+  const dateRange = maxDate - minDate || 1;
+
+  function xPos(d) { return pad.l + ((new Date(d) - minDate) / dateRange) * iW; }
+  function yPos(v) { return pad.t + iH - (v / maxVal) * iH; }
+
+  const pts = sorted.map(([d, v]) => [xPos(d), yPos(v)]);
+  const pathD = pts.map((p, i) => (i === 0 ? `M${p[0]},${p[1]}` : `L${p[0]},${p[1]}`)).join(' ');
+  const areaD = `${pathD} L${pts[pts.length-1][0]},${pad.t+iH} L${pts[0][0]},${pad.t+iH} Z`;
+
+  const sym = activeCurrency !== 'all' ? CURRENCIES[activeCurrency].symbol : '';
+  const yTicks = [0, 0.25, 0.5, 0.75, 1].map(t => ({
+    v: maxVal * t,
+    y: yPos(maxVal * t)
+  }));
+
+  const step = Math.max(1, Math.floor(dates.length / 5));
+  const xLabels = dates.filter((_, i) => i % step === 0 || i === dates.length - 1);
+
+  svg.innerHTML = `
+    <defs>
+      <linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="#e8621a" stop-opacity="0.25"/>
+        <stop offset="100%" stop-color="#e8621a" stop-opacity="0.02"/>
+      </linearGradient>
+    </defs>
+    ${yTicks.map(t => `
+      <line x1="${pad.l}" y1="${t.y}" x2="${pad.l+iW}" y2="${t.y}" stroke="#e8e5de" stroke-width="1"/>
+      <text x="${pad.l-8}" y="${t.y+4}" text-anchor="end" fill="#aaa" font-size="10" font-family="DM Sans">${sym}${Math.round(t.v).toLocaleString()}</text>
+    `).join('')}
+    <path d="${areaD}" fill="url(#areaGrad)"/>
+    <path d="${pathD}" fill="none" stroke="#e8621a" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+    ${pts.map(p => `<circle cx="${p[0]}" cy="${p[1]}" r="3.5" fill="#e8621a"/>`).join('')}
+    ${xLabels.map(d => `<text x="${xPos(d)}" y="${pad.t+iH+20}" text-anchor="middle" fill="#aaa" font-size="10" font-family="DM Sans">${d}</text>`).join('')}
+  `;
+}
+
+// ─── FILTER BAR (dynamic) ──────────────────────────────────────────────────
+function renderFilterBar() {
+  const bar = document.getElementById('filterBar');
+  const cats = getCategories();
+  bar.innerHTML = `<button class="filter-btn ${activeFilter === 'all' ? 'active' : ''}" data-cat="all">All</button>`
+    + cats.map(c => `<button class="filter-btn ${activeFilter === c.toLowerCase().trim() ? 'active' : ''}" data-cat="${c.toLowerCase().trim()}" style="${activeFilter === c.toLowerCase().trim() ? `background:${catColor(c)};border-color:${catColor(c)}` : ''}">${c}</button>`).join('');
+}
+
+// ─── TOP-LEVEL RENDER ──────────────────────────────────────────────────────
+function render() {
+  renderFilterBar();
+  renderTable();
+  renderDonut();
+  renderAreaChart();
+  const all = expenses;
+  if (all.length) {
+    const dates = all.map(e => e.date).sort();
+    document.getElementById('dateRangeLabel').textContent = `${dates[0]} – ${dates[dates.length-1]}`;
+  } else {
+    document.getElementById('dateRangeLabel').textContent = 'All time';
+  }
+}
+
+// Seed only on very first visit (never re-seeds after that)
+if (!localStorage.getItem('gullak_seeded')) {
+  localStorage.setItem('gullak_seeded', '1');
+  const today = new Date();
+  const d = (offset) => {
+    const dt = new Date(today);
+    dt.setDate(dt.getDate() - offset);
+    return dt.toISOString().split('T')[0];
+  };
+  expenses = [
+    { id: genId(), amount: 2000,  currency: 'CRC', category: 'Home',      date: d(0),  description: 'home cleaning supplies' },
+    { id: genId(), amount: 1.50,  currency: 'USD', category: 'Shopping',  date: d(0),  description: 'a new phone case from Amazon' },
+    { id: genId(), amount: 25000, currency: 'CRC', category: 'Health',    date: d(0),  description: 'a visit to the doctor' },
+    { id: genId(), amount: 4500,  currency: 'CRC', category: 'Groceries', date: d(2),  description: 'groceries at Automercado' },
+    { id: genId(), amount: 12.99, currency: 'USD', category: 'Transport', date: d(3),  description: 'Uber ride' },
+    { id: genId(), amount: 89.00, currency: 'USD', category: 'Shopping',  date: d(5),  description: 'new headphones' },
+    { id: genId(), amount: 6000,  currency: 'CRC', category: 'Food',      date: d(6),  description: 'dinner at La Criollita' },
+    { id: genId(), amount: 9900,  currency: 'CRC', category: 'Home',      date: d(8),  description: 'electric bill' },
+    { id: genId(), amount: 45.00, currency: 'USD', category: 'Services',  date: d(10), description: 'Netflix & Spotify' },
+    { id: genId(), amount: 3500,  currency: 'CRC', category: 'Food',      date: d(12), description: 'coffee and snacks' },
+  ];
+  save();
+}
+
+render();
+</script>
+</body>
+</html>
