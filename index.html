@@ -338,9 +338,39 @@
 <main>
   <div class="page-header">
     <h1 class="page-title">Dashboard Overview</h1>
-    <div class="date-badge">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-      <span id="dateRangeLabel">All time</span>
+
+    <div style="display:flex; align-items:center; gap:0.6rem;">
+
+    <button class="add-btn" onclick="exportExpenses()" title="Export">
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+    <path d="M12 3v12"/>
+    <path d="M7 10l5 5 5-5"/>
+  </svg>
+  Export
+</button>
+
+      <button class="add-btn" onclick="document.getElementById('importFile').click()" title="Import">
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+    <path d="M12 21V9"/>
+    <path d="M17 14l-5-5-5 5"/>
+  </svg>
+  Import
+</button>
+
+    <input type="file" id="importFile" accept="application/json" style="display:none">
+  </div>
+
+  <div class="date-badge">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <rect x="3" y="4" width="18" height="18" rx="2"/>
+      <line x1="16" y1="2" x2="16" y2="6"/>
+      <line x1="8" y1="2" x2="8" y2="6"/>
+      <line x1="3" y1="10" x2="21" y2="10"/>
+    </svg>
+    <span id="dateRangeLabel">All time</span>
+  </div>
+
+</div>
     </div>
   </div>
 
@@ -377,10 +407,10 @@
       <div class="filter-bar" id="filterBar">
         <button class="filter-btn active" data-cat="all">All</button>
       </div>
-      <button class="add-btn" onclick="openModal()">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-        Add Expense
-      </button>
+<button class="add-btn" onclick="openModal()">
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+  Add Expense
+</button>
     </div>
   </div>
 
@@ -760,6 +790,8 @@ document.getElementById('filterBar').addEventListener('click', e => {
   selected.clear();
   renderFilterBar();
   renderTable();
+  renderDonut();
+  renderAreaChart();
 });
 
 // ─── SELECTION ─────────────────────────────────────────────────────────────
@@ -814,7 +846,101 @@ function deleteSelected() {
   save();
   render();
 }
+function exportExpenses() {
+  const payload = {
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    expenses
+  };
 
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `expenses-backup-${new Date().toISOString().slice(0, 10)}.json`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+
+  URL.revokeObjectURL(url);
+}
+
+function normalizeImportedExpenses(list) {
+  if (!Array.isArray(list)) return [];
+
+  return list
+    .filter(e => e && typeof e === 'object')
+    .map(e => {
+      const categories = Array.isArray(e.categories) && e.categories.length
+        ? [...new Set(e.categories.map(x => String(x).trim()).filter(Boolean))]
+        : (e.category ? [String(e.category).trim()] : []);
+
+      return {
+        id: e.id || genId(),
+        amount: Number(e.amount) || 0,
+        currency: e.currency === 'USD' ? 'USD' : 'CRC',
+        category: categories[0] || 'Uncategorized',
+        categories,
+        date: e.date || new Date().toISOString().split('T')[0],
+        description: String(e.description || '').trim()
+      };
+    })
+    .filter(e => e.amount > 0 && e.date && e.description);
+}
+
+function importExpensesFromFile(file) {
+  const reader = new FileReader();
+
+  reader.onload = function(evt) {
+    try {
+      const raw = JSON.parse(evt.target.result);
+      const importedList = Array.isArray(raw) ? raw : raw.expenses;
+      const normalized = normalizeImportedExpenses(importedList);
+
+      if (!normalized.length) {
+        alert('No valid expenses found in that file.');
+        return;
+      }
+
+      const proceed = confirm(
+        `Import ${normalized.length} expense${normalized.length > 1 ? 's' : ''}?\n\nPress OK to continue.\nPress Cancel to stop.`
+      );
+
+      if (!proceed) {
+        document.getElementById('importFile').value = '';
+        return;
+      }
+
+      const mergeMode = confirm(
+        'Press OK to MERGE imported expenses with current ones.\n\nPress Cancel to REPLACE all current expenses.'
+      );
+
+      if (mergeMode) {
+        const existingIds = new Set(expenses.map(e => e.id));
+        const toAdd = normalized.map(e => {
+          if (existingIds.has(e.id)) {
+            return { ...e, id: genId() };
+          }
+          return e;
+        });
+        expenses = [...expenses, ...toAdd];
+      } else {
+        expenses = normalized;
+      }
+
+      save();
+      render();
+      alert(`Imported ${normalized.length} expense${normalized.length > 1 ? 's' : ''}.`);
+    } catch (err) {
+      alert('Invalid backup file.');
+    } finally {
+      document.getElementById('importFile').value = '';
+    }
+  };
+
+  reader.readAsText(file);
+}
 // ─── TABLE ─────────────────────────────────────────────────────────────────
 function renderTable() {
   const tbody = document.getElementById('txTable');
@@ -850,10 +976,15 @@ function renderTable() {
       : [e.category];
 
     const tagsHtml = cats.map(cat => `
-      <span class="tag" style="background:${catColor(cat)}; margin-right:0.35rem; margin-bottom:0.25rem;">
-        ${cat}
-      </span>
-    `).join('');
+  <span
+    class="tag"
+    onclick="filterByTag('${cat.replace(/'/g, "\\'")}')"
+    style="background:${catColor(cat)}; margin-right:0.35rem; margin-bottom:0.25rem; cursor:pointer;"
+    title="Filter by ${cat}"
+  >
+    ${cat}
+  </span>
+`).join('');
 
     return `
       <tr data-id="${e.id}" class="${isSel ? 'selected' : ''}">
@@ -886,7 +1017,16 @@ function renderDonut() {
   const cx = 100, cy = 100, r = 80, stroke = 30;
   const circ = 2 * Math.PI * r;
 
-  const base = visibleExpenses();
+  let base = visibleExpenses();
+
+if (activeFilter !== 'all') {
+  base = base.filter(e => {
+    const cats = Array.isArray(e.categories) && e.categories.length
+      ? e.categories
+      : [e.category];
+    return cats.some(cat => cat.toLowerCase().trim() === activeFilter);
+  });
+}
 
   if (!base.length) {
     svg.innerHTML = `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="#e8e5de" stroke-width="${stroke}"/>`;
@@ -955,7 +1095,16 @@ function renderAreaChart() {
   const W = 560, H = 220, pad = { t: 20, r: 20, b: 40, l: 60 };
   const iW = W - pad.l - pad.r, iH = H - pad.t - pad.b;
 
-  const base = visibleExpenses();
+  let base = visibleExpenses();
+
+if (activeFilter !== 'all') {
+  base = base.filter(e => {
+    const cats = Array.isArray(e.categories) && e.categories.length
+      ? e.categories
+      : [e.category];
+    return cats.some(cat => cat.toLowerCase().trim() === activeFilter);
+  });
+}
 
   if (!base.length) {
     svg.innerHTML = `<text x="${W/2}" y="${H/2}" text-anchor="middle" fill="#888" font-size="13" font-family="DM Sans">Add expenses to see your chart</text>`;
@@ -1020,6 +1169,15 @@ function renderFilterBar() {
     cats.map(c => `<button class="filter-btn ${activeFilter === c.toLowerCase().trim() ? 'active' : ''}" data-cat="${c.toLowerCase().trim()}" style="${activeFilter === c.toLowerCase().trim() ? `background:${catColor(c)};border-color:${catColor(c)}` : ''}">${c}</button>`).join('');
 }
 
+function filterByTag(tag) {
+  activeFilter = tag.toLowerCase().trim();
+  selected.clear();
+  renderFilterBar();
+  renderTable();
+  renderDonut();
+  renderAreaChart();
+}
+
 // ─── TOP-LEVEL RENDER ──────────────────────────────────────────────────────
 function render() {
   renderFilterBar();
@@ -1037,6 +1195,13 @@ function render() {
 }
 
 render();
+document.getElementById('importFile').addEventListener('change', e => {
+  const file = e.target.files && e.target.files[0];
+  if (!file) return;
+  importExpensesFromFile(file);
+});
+
+
 </script>
 </body>
 </html>
