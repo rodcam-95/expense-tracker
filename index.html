@@ -457,15 +457,26 @@ let activeFilter = 'all';
 let activeCurrency = 'all';
 let selected = new Set();
 
+// normalize old records so they also have categories[]
+expenses = expenses.map(e => ({
+  ...e,
+  categories: Array.isArray(e.categories) && e.categories.length
+    ? [...new Set(e.categories.map(x => String(x).trim()).filter(Boolean))]
+    : (e.category ? [e.category] : [])
+}));
+
 // ─── CATEGORY COLORS (auto-generated, stable per name) ─────────────────────
 const PALETTE = [
   '#e8621a','#2db87a','#1a8ce8','#e8266e','#7c5cbf',
   '#f5a623','#3d8c6e','#c0392b','#2471a3','#884ea0',
   '#1e8449','#d35400','#2e86c1','#a93226','#117a65'
 ];
+
 const colorCache = {};
+
 function catColor(cat) {
-  const key = cat.toLowerCase().trim();
+  const key = String(cat || '').toLowerCase().trim();
+  if (!key) return PALETTE[0];
   if (!colorCache[key]) {
     const idx = Object.keys(colorCache).length % PALETTE.length;
     colorCache[key] = PALETTE[idx];
@@ -476,10 +487,22 @@ function catColor(cat) {
 function getCategories() {
   const seen = new Set();
   const cats = [];
+
   for (const e of expenses) {
-    const k = e.category.toLowerCase().trim();
-    if (!seen.has(k)) { seen.add(k); cats.push(e.category.trim()); }
+    const arr = Array.isArray(e.categories) && e.categories.length
+      ? e.categories
+      : [e.category];
+
+    for (const cat of arr) {
+      const clean = String(cat || '').trim();
+      const key = clean.toLowerCase();
+      if (clean && !seen.has(key)) {
+        seen.add(key);
+        cats.push(clean);
+      }
+    }
   }
+
   return cats;
 }
 
@@ -488,8 +511,13 @@ const CURRENCIES = {
   USD: { symbol: '$', name: 'USD', decimals: 2 }
 };
 
-function save() { localStorage.setItem('gullak_expenses', JSON.stringify(expenses)); }
-function genId() { return Date.now().toString(36) + Math.random().toString(36).slice(2); }
+function save() {
+  localStorage.setItem('gullak_expenses', JSON.stringify(expenses));
+}
+
+function genId() {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2);
+}
 
 function fmt(n, currency) {
   const cur = CURRENCIES[currency] || CURRENCIES.CRC;
@@ -502,22 +530,36 @@ function fmt(n, currency) {
 
 function fmtDate(d) {
   const dt = new Date(d + 'T00:00:00');
-  return dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  return dt.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric'
+  });
 }
 
 function visibleExpenses() {
   return expenses.filter(e => activeCurrency === 'all' || e.currency === activeCurrency);
 }
 
+function parseCategoryInput(value) {
+  return [...new Set(
+    String(value || '')
+      .split(',')
+      .map(x => x.trim())
+      .filter(Boolean)
+  )];
+}
+
 // ─── MODAL ─────────────────────────────────────────────────────────────────
 function openModal(id = null) {
   editingId = id;
   document.getElementById('modalTitle').textContent = id ? 'Edit Expense' : 'Add Expense';
+
   if (id) {
     const e = expenses.find(x => x.id === id);
     document.getElementById('fAmount').value = e.amount;
     document.getElementById('fCurrency').value = e.currency || 'CRC';
-    document.getElementById('fCategory').value = e.category;
+    document.getElementById('fCategory').value = (e.categories && e.categories.length ? e.categories : [e.category]).join(', ');
     document.getElementById('fDate').value = e.date;
     document.getElementById('fDesc').value = e.description;
   } else {
@@ -527,15 +569,18 @@ function openModal(id = null) {
     document.getElementById('fDate').value = new Date().toISOString().split('T')[0];
     document.getElementById('fDesc').value = '';
   }
+
   document.getElementById('catDropdown').classList.remove('open');
   document.getElementById('modalOverlay').classList.add('open');
   document.getElementById('fAmount').focus();
 }
+
 function closeModal() {
   document.getElementById('modalOverlay').classList.remove('open');
   document.getElementById('catDropdown').classList.remove('open');
   editingId = null;
 }
+
 document.getElementById('modalOverlay').addEventListener('click', e => {
   if (e.target === document.getElementById('modalOverlay')) closeModal();
 });
@@ -543,69 +588,157 @@ document.getElementById('modalOverlay').addEventListener('click', e => {
 function saveExpense() {
   const amount = parseFloat(document.getElementById('fAmount').value);
   const currency = document.getElementById('fCurrency').value;
-  const category = document.getElementById('fCategory').value.trim();
+  const categories = parseCategoryInput(document.getElementById('fCategory').value);
   const date = document.getElementById('fDate').value;
   const description = document.getElementById('fDesc').value.trim();
-  if (!amount || amount <= 0) { alert('Please enter a valid amount.'); return; }
-  if (!category) { alert('Please enter a category.'); return; }
-  if (!date) { alert('Please select a date.'); return; }
-  if (!description) { alert('Please add a description.'); return; }
 
-  // ensure color assigned
+  if (!amount || amount <= 0) {
+    alert('Please enter a valid amount.');
+    return;
+  }
+  if (!categories.length) {
+    alert('Please enter at least one tag/category.');
+    return;
+  }
+  if (!date) {
+    alert('Please select a date.');
+    return;
+  }
+  if (!description) {
+    alert('Please add a description.');
+    return;
+  }
+
+  const category = categories[0]; // first one stays the primary category for charts/filters
   catColor(category);
+
+  const record = {
+    id: editingId || genId(),
+    amount,
+    currency,
+    category,
+    categories,
+    date,
+    description
+  };
 
   if (editingId) {
     const i = expenses.findIndex(x => x.id === editingId);
-    expenses[i] = { id: editingId, amount, currency, category, date, description };
+    expenses[i] = record;
   } else {
-    expenses.push({ id: genId(), amount, currency, category, date, description });
+    expenses.push(record);
   }
-  save(); closeModal(); render();
+
+  save();
+  closeModal();
+  render();
 }
 
-// ─── CATEGORY AUTOCOMPLETE ──────────────────────────────────────────────────
+// ─── CATEGORY AUTOCOMPLETE (MULTI-SELECT IN SAME INPUT) ───────────────────
 let dropFocusIdx = -1;
 
 function updateDropdown(query) {
   const dd = document.getElementById('catDropdown');
   const cats = getCategories();
-  const q = query.toLowerCase().trim();
-  // show all if empty, filter if typing (exclude exact match)
-  const matches = cats.filter(c => !q || (c.toLowerCase().includes(q) && c.toLowerCase() !== q));
-  if (!matches.length) { dd.classList.remove('open'); return; }
+
+  const inputVal = document.getElementById('fCategory').value;
+  const parts = inputVal.split(',').map(x => x.trim());
+
+  // selected = everything except the currently typed fragment
+  const selectedCats = parts
+    .slice(0, -1)
+    .map(x => x.toLowerCase())
+    .filter(Boolean);
+
+  const q = String(query || '').toLowerCase().trim();
+
+  const matches = cats.filter(c => {
+    const lower = c.toLowerCase();
+    if (selectedCats.includes(lower)) return false;
+    return !q || lower.includes(q);
+  });
+
+  if (!matches.length) {
+    dd.classList.remove('open');
+    dd.innerHTML = '';
+    return;
+  }
+
   dropFocusIdx = -1;
   dd.innerHTML = matches.map((c, i) => `
-    <div class="cat-option" data-idx="${i}" onmousedown="pickCategory('${c.replace(/'/g,"\\'")}')">
+    <div class="cat-option" data-idx="${i}" onmousedown="pickCategory('${c.replace(/'/g, "\\'")}')">
       <span class="cat-dot" style="background:${catColor(c)}"></span>${c}
-    </div>`).join('');
+    </div>
+  `).join('');
+
   dd.classList.add('open');
 }
 
 function pickCategory(val) {
-  document.getElementById('fCategory').value = val;
-  document.getElementById('catDropdown').classList.remove('open');
+  const input = document.getElementById('fCategory');
+  let parts = input.value.split(',').map(x => x.trim());
+
+  // remove the current unfinished fragment
+  if (parts.length && parts[parts.length - 1] !== '') {
+    parts.pop();
+  }
+
+  parts = parts.filter(Boolean);
+
+  const exists = parts.some(x => x.toLowerCase() === val.toLowerCase());
+  if (!exists) parts.push(val);
+
+  input.value = parts.join(', ') + ', ';
+  input.focus();
+  updateDropdown('');
 }
 
-document.getElementById('fCategory').addEventListener('input', e => updateDropdown(e.target.value));
-document.getElementById('fCategory').addEventListener('focus', e => updateDropdown(e.target.value));
-document.getElementById('fCategory').addEventListener('blur', () => {
-  setTimeout(() => document.getElementById('catDropdown').classList.remove('open'), 150);
+document.getElementById('fCategory').addEventListener('input', e => {
+  const parts = e.target.value.split(',');
+  const lastPart = parts[parts.length - 1].trim();
+  updateDropdown(lastPart);
 });
+
+document.getElementById('fCategory').addEventListener('focus', e => {
+  const parts = e.target.value.split(',');
+  const lastPart = parts[parts.length - 1].trim();
+  updateDropdown(lastPart);
+});
+
+document.getElementById('fCategory').addEventListener('blur', () => {
+  setTimeout(() => {
+    document.getElementById('catDropdown').classList.remove('open');
+  }, 150);
+});
+
 document.getElementById('fCategory').addEventListener('keydown', e => {
   const dd = document.getElementById('catDropdown');
   const opts = dd.querySelectorAll('.cat-option');
   if (!dd.classList.contains('open') || !opts.length) return;
-  if (e.key === 'ArrowDown') { e.preventDefault(); dropFocusIdx = Math.min(dropFocusIdx+1, opts.length-1); }
-  else if (e.key === 'ArrowUp') { e.preventDefault(); dropFocusIdx = Math.max(dropFocusIdx-1, -1); }
-  else if (e.key === 'Enter' && dropFocusIdx >= 0) { e.preventDefault(); pickCategory(opts[dropFocusIdx].textContent.trim()); return; }
-  else if (e.key === 'Escape') { dd.classList.remove('open'); return; }
+
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    dropFocusIdx = Math.min(dropFocusIdx + 1, opts.length - 1);
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    dropFocusIdx = Math.max(dropFocusIdx - 1, -1);
+  } else if (e.key === 'Enter' && dropFocusIdx >= 0) {
+    e.preventDefault();
+    pickCategory(opts[dropFocusIdx].textContent.trim());
+    return;
+  } else if (e.key === 'Escape') {
+    dd.classList.remove('open');
+    return;
+  }
+
   opts.forEach((o, i) => o.classList.toggle('focused', i === dropFocusIdx));
 });
 
 function deleteExpense(id) {
   if (!confirm('Delete this expense?')) return;
   expenses = expenses.filter(x => x.id !== id);
-  save(); render();
+  save();
+  render();
 }
 
 // ─── CURRENCY TABS ─────────────────────────────────────────────────────────
@@ -633,13 +766,14 @@ document.getElementById('filterBar').addEventListener('click', e => {
 function updateBulkBar() {
   const bar = document.getElementById('bulkBar');
   const count = document.getElementById('bulkCount');
+
   if (selected.size > 0) {
     bar.classList.add('visible');
     count.textContent = `${selected.size} expense${selected.size > 1 ? 's' : ''} selected`;
   } else {
     bar.classList.remove('visible');
   }
-  // sync select-all checkbox state
+
   const allBoxes = document.querySelectorAll('.row-cb');
   const selectAllBox = document.getElementById('selectAll');
   if (selectAllBox) {
@@ -677,7 +811,8 @@ function deleteSelected() {
   if (!confirm(`Delete ${selected.size} expense${selected.size > 1 ? 's' : ''}?`)) return;
   expenses = expenses.filter(e => !selected.has(e.id));
   selected.clear();
-  save(); render();
+  save();
+  render();
 }
 
 // ─── TABLE ─────────────────────────────────────────────────────────────────
@@ -685,35 +820,61 @@ function renderTable() {
   const tbody = document.getElementById('txTable');
   const empty = document.getElementById('emptyState');
   let base = visibleExpenses();
-  const filtered = activeFilter === 'all' ? base : base.filter(x => x.category.toLowerCase().trim() === activeFilter);
+
+  const filtered = activeFilter === 'all'
+    ? base
+    : base.filter(x => {
+        const cats = Array.isArray(x.categories) && x.categories.length
+          ? x.categories
+          : [x.category];
+        return cats.some(cat => cat.toLowerCase().trim() === activeFilter);
+      });
+
   const sorted = [...filtered].sort((a, b) => b.date.localeCompare(a.date));
+
   if (!sorted.length) {
     tbody.innerHTML = '';
     empty.style.display = 'block';
     updateBulkBar();
     return;
   }
+
   empty.style.display = 'none';
+
   tbody.innerHTML = sorted.map(e => {
     const cur = e.currency || 'CRC';
     const isSel = selected.has(e.id);
-    const color = catColor(e.category);
+
+    const cats = Array.isArray(e.categories) && e.categories.length
+      ? e.categories
+      : [e.category];
+
+    const tagsHtml = cats.map(cat => `
+      <span class="tag" style="background:${catColor(cat)}; margin-right:0.35rem; margin-bottom:0.25rem;">
+        ${cat}
+      </span>
+    `).join('');
+
     return `
-    <tr data-id="${e.id}" class="${isSel ? 'selected' : ''}">
-      <td class="cb-col"><input type="checkbox" class="row-cb" data-id="${e.id}" ${isSel ? 'checked' : ''} onchange="toggleRow('${e.id}', this.checked)"></td>
-      <td>${fmtDate(e.date)}</td>
-      <td class="amount">
-        ${fmt(e.amount, cur)}
-        <span class="cur-badge cur-${cur.toLowerCase()}">${cur}</span>
-      </td>
-      <td><span class="tag" style="background:${color}">${e.category}</span></td>
-      <td>${e.description}</td>
-      <td class="actions">
-        <span title="Edit" onclick="openModal('${e.id}')" style="margin-right:0.75rem;cursor:pointer;">✏️</span>
-        <span title="Delete" onclick="deleteExpense('${e.id}')" style="cursor:pointer;">🗑️</span>
-      </td>
-    </tr>
-  `}).join('');
+      <tr data-id="${e.id}" class="${isSel ? 'selected' : ''}">
+        <td class="cb-col">
+          <input type="checkbox" class="row-cb" data-id="${e.id}" ${isSel ? 'checked' : ''} onchange="toggleRow('${e.id}', this.checked)">
+        </td>
+        <td>${fmtDate(e.date)}</td>
+        <td class="amount">
+          ${fmt(e.amount, cur)}
+          <span class="cur-badge cur-${cur.toLowerCase()}">${cur}</span>
+        </td>
+        <td>${tagsHtml}</td>
+        <td>${e.description}</td>
+        <td class="actions">
+          <span title="Edit" onclick="openModal('${e.id}')" style="margin-right:0.75rem;cursor:pointer;">✏️</span>
+          <span title="Delete" onclick="deleteExpense('${e.id}')" style="cursor:pointer;">🗑️</span>
+        </td>
+      </tr>
+    `;
+  }).join('');
+
   updateBulkBar();
 }
 
@@ -734,9 +895,7 @@ function renderDonut() {
     return;
   }
 
-  // When viewing a single currency, tally by category normally
-  // When viewing "all", tally by category+currency key so mixed currencies stay separate
-  const totals = {}; // key → { cat, currency, amount }
+  const totals = {};
   for (const e of base) {
     const cur = e.currency || 'CRC';
     const key = activeCurrency === 'all' ? `${e.category}||${cur}` : e.category;
@@ -747,7 +906,6 @@ function renderDonut() {
   const entries = Object.values(totals);
   const grandTotal = entries.reduce((a, b) => a + b.amount, 0);
 
-  // Center label: single currency → show total; mixed → show per-currency totals
   if (activeCurrency !== 'all') {
     const sym = CURRENCIES[activeCurrency].symbol;
     const dec = CURRENCIES[activeCurrency].decimals;
@@ -781,12 +939,13 @@ function renderDonut() {
     const curBadge = activeCurrency === 'all'
       ? `<span class="cur-badge cur-${s.currency.toLowerCase()}" style="margin-left:0.25rem">${s.currency}</span>`
       : '';
+
     return `
-    <div class="legend-item">
-      <div class="legend-dot" style="background:${catColor(s.cat)}"></div>
-      <span class="legend-name">${s.cat}${curBadge}</span>
-      <span class="legend-val">${valStr}</span>
-    </div>`;
+      <div class="legend-item">
+        <div class="legend-dot" style="background:${catColor(s.cat)}"></div>
+        <span class="legend-name">${s.cat}${curBadge}</span>
+        <span class="legend-val">${valStr}</span>
+      </div>`;
   }).join('');
 }
 
@@ -803,7 +962,6 @@ function renderAreaChart() {
     return;
   }
 
-  // Group by date
   const byDate = {};
   for (const e of base) byDate[e.date] = (byDate[e.date] || 0) + e.amount;
   const sorted = Object.entries(byDate).sort((a, b) => a[0].localeCompare(b[0]));
@@ -816,7 +974,7 @@ function renderAreaChart() {
   const dates = sorted.map(x => x[0]);
   const vals = sorted.map(x => x[1]);
   const maxVal = Math.max(...vals);
-  const minDate = new Date(dates[0]), maxDate = new Date(dates[dates.length-1]);
+  const minDate = new Date(dates[0]), maxDate = new Date(dates[dates.length - 1]);
   const dateRange = maxDate - minDate || 1;
 
   function xPos(d) { return pad.l + ((new Date(d) - minDate) / dateRange) * iW; }
@@ -824,7 +982,7 @@ function renderAreaChart() {
 
   const pts = sorted.map(([d, v]) => [xPos(d), yPos(v)]);
   const pathD = pts.map((p, i) => (i === 0 ? `M${p[0]},${p[1]}` : `L${p[0]},${p[1]}`)).join(' ');
-  const areaD = `${pathD} L${pts[pts.length-1][0]},${pad.t+iH} L${pts[0][0]},${pad.t+iH} Z`;
+  const areaD = `${pathD} L${pts[pts.length - 1][0]},${pad.t + iH} L${pts[0][0]},${pad.t + iH} Z`;
 
   const sym = activeCurrency !== 'all' ? CURRENCIES[activeCurrency].symbol : '';
   const yTicks = [0, 0.25, 0.5, 0.75, 1].map(t => ({
@@ -843,13 +1001,13 @@ function renderAreaChart() {
       </linearGradient>
     </defs>
     ${yTicks.map(t => `
-      <line x1="${pad.l}" y1="${t.y}" x2="${pad.l+iW}" y2="${t.y}" stroke="#e8e5de" stroke-width="1"/>
-      <text x="${pad.l-8}" y="${t.y+4}" text-anchor="end" fill="#aaa" font-size="10" font-family="DM Sans">${sym}${Math.round(t.v).toLocaleString()}</text>
+      <line x1="${pad.l}" y1="${t.y}" x2="${pad.l + iW}" y2="${t.y}" stroke="#e8e5de" stroke-width="1"/>
+      <text x="${pad.l - 8}" y="${t.y + 4}" text-anchor="end" fill="#aaa" font-size="10" font-family="DM Sans">${sym}${Math.round(t.v).toLocaleString()}</text>
     `).join('')}
     <path d="${areaD}" fill="url(#areaGrad)"/>
     <path d="${pathD}" fill="none" stroke="#e8621a" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
     ${pts.map(p => `<circle cx="${p[0]}" cy="${p[1]}" r="3.5" fill="#e8621a"/>`).join('')}
-    ${xLabels.map(d => `<text x="${xPos(d)}" y="${pad.t+iH+20}" text-anchor="middle" fill="#aaa" font-size="10" font-family="DM Sans">${d}</text>`).join('')}
+    ${xLabels.map(d => `<text x="${xPos(d)}" y="${pad.t + iH + 20}" text-anchor="middle" fill="#aaa" font-size="10" font-family="DM Sans">${d}</text>`).join('')}
   `;
 }
 
@@ -857,8 +1015,9 @@ function renderAreaChart() {
 function renderFilterBar() {
   const bar = document.getElementById('filterBar');
   const cats = getCategories();
-  bar.innerHTML = `<button class="filter-btn ${activeFilter === 'all' ? 'active' : ''}" data-cat="all">All</button>`
-    + cats.map(c => `<button class="filter-btn ${activeFilter === c.toLowerCase().trim() ? 'active' : ''}" data-cat="${c.toLowerCase().trim()}" style="${activeFilter === c.toLowerCase().trim() ? `background:${catColor(c)};border-color:${catColor(c)}` : ''}">${c}</button>`).join('');
+  bar.innerHTML =
+    `<button class="filter-btn ${activeFilter === 'all' ? 'active' : ''}" data-cat="all">All</button>` +
+    cats.map(c => `<button class="filter-btn ${activeFilter === c.toLowerCase().trim() ? 'active' : ''}" data-cat="${c.toLowerCase().trim()}" style="${activeFilter === c.toLowerCase().trim() ? `background:${catColor(c)};border-color:${catColor(c)}` : ''}">${c}</button>`).join('');
 }
 
 // ─── TOP-LEVEL RENDER ──────────────────────────────────────────────────────
@@ -867,37 +1026,14 @@ function render() {
   renderTable();
   renderDonut();
   renderAreaChart();
+
   const all = expenses;
   if (all.length) {
     const dates = all.map(e => e.date).sort();
-    document.getElementById('dateRangeLabel').textContent = `${dates[0]} – ${dates[dates.length-1]}`;
+    document.getElementById('dateRangeLabel').textContent = `${dates[0]} – ${dates[dates.length - 1]}`;
   } else {
     document.getElementById('dateRangeLabel').textContent = 'All time';
   }
-}
-
-// Seed only on very first visit (never re-seeds after that)
-if (!localStorage.getItem('gullak_seeded')) {
-  localStorage.setItem('gullak_seeded', '1');
-  const today = new Date();
-  const d = (offset) => {
-    const dt = new Date(today);
-    dt.setDate(dt.getDate() - offset);
-    return dt.toISOString().split('T')[0];
-  };
-  expenses = [
-    { id: genId(), amount: 2000,  currency: 'CRC', category: 'Home',      date: d(0),  description: 'home cleaning supplies' },
-    { id: genId(), amount: 1.50,  currency: 'USD', category: 'Shopping',  date: d(0),  description: 'a new phone case from Amazon' },
-    { id: genId(), amount: 25000, currency: 'CRC', category: 'Health',    date: d(0),  description: 'a visit to the doctor' },
-    { id: genId(), amount: 4500,  currency: 'CRC', category: 'Groceries', date: d(2),  description: 'groceries at Automercado' },
-    { id: genId(), amount: 12.99, currency: 'USD', category: 'Transport', date: d(3),  description: 'Uber ride' },
-    { id: genId(), amount: 89.00, currency: 'USD', category: 'Shopping',  date: d(5),  description: 'new headphones' },
-    { id: genId(), amount: 6000,  currency: 'CRC', category: 'Food',      date: d(6),  description: 'dinner at La Criollita' },
-    { id: genId(), amount: 9900,  currency: 'CRC', category: 'Home',      date: d(8),  description: 'electric bill' },
-    { id: genId(), amount: 45.00, currency: 'USD', category: 'Services',  date: d(10), description: 'Netflix & Spotify' },
-    { id: genId(), amount: 3500,  currency: 'CRC', category: 'Food',      date: d(12), description: 'coffee and snacks' },
-  ];
-  save();
 }
 
 render();
